@@ -1,0 +1,57 @@
+name: Import AI cards to project
+
+# Run from the Actions tab: Import AI cards to project > Run workflow.
+# Screenshots are served from THIS public repo; issues are created in dhruva-docs.
+# Needs the repository secret PROJECT_TOKEN (classic token, scopes: repo + project).
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'trial = one card (AI-CHT-001), all = every card, check = only test access'
+        type: choice
+        options: [trial, all, check]
+        default: trial
+      update:
+        description: 'Also rewrite cards that already exist (use this to fix the screenshots in cards already imported)'
+        type: boolean
+        default: true
+      drafts:
+        description: 'Create project-only draft items instead of repository issues'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+      OWNER: Dhruva-One
+      PROJECT: 1
+      ISSUE_REPO: Dhruva-One/dhruva-docs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check token and access
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Secret PROJECT_TOKEN is missing (Settings > Secrets and variables > Actions)."; exit 1
+          fi
+          gh repo view "$ISSUE_REPO" > /dev/null || { echo "::error::The token cannot see $ISSUE_REPO. It needs the 'repo' scope and access to that repository."; exit 1; }
+          gh project view "$PROJECT" --owner "$OWNER" > /dev/null || { echo "::error::The token cannot open project $PROJECT of $OWNER. It needs the 'project' scope."; exit 1; }
+          echo "Access OK."
+
+      - name: Import cards
+        if: ${{ inputs.mode != 'check' }}
+        run: |
+          BASE="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.event.repository.default_branch }}/images"
+          ARGS="--repo $ISSUE_REPO --owner $OWNER --project $PROJECT --image-mode inline --image-base $BASE --delay 1"
+          if [ "${{ inputs.mode }}" = "trial" ]; then ARGS="$ARGS --only AI-CHT-001"; fi
+          if [ "${{ inputs.drafts }}" = "true" ]; then ARGS="$ARGS --drafts"; fi
+          if [ "${{ inputs.update }}" = "true" ]; then ARGS="$ARGS --update"; fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python3 import_cards.py $ARGS | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
