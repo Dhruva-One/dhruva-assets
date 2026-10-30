@@ -44,14 +44,38 @@ jobs:
           gh project view "$PROJECT" --owner "$OWNER" > /dev/null || { echo "::error::The token cannot open project $PROJECT of $OWNER. It needs the 'project' scope."; exit 1; }
           echo "Access OK."
 
+      - name: Find the card files
+        id: loc
+        if: ${{ inputs.mode != 'check' }}
+        shell: bash
+        run: |
+          echo "Files in the repository:"; find . -type f -not -path './.git/*' | grep -v '\.jpg$' | head -n 40
+          SCRIPT=$(find . -name import_cards.py -not -path './.git/*' | head -n 1)
+          CARDS=$(find . -name cards.json -not -path './.git/*' | head -n 1)
+          if [ -z "$SCRIPT" ]; then echo "::error::import_cards.py was not found anywhere in the repository. Upload it (and cards.json) from the zip."; exit 1; fi
+          if [ -z "$CARDS" ]; then echo "::error::cards.json was not found anywhere in the repository. Upload it from the zip."; exit 1; fi
+          IMG=$(find . -type d -name images -not -path './.git/*' | head -n 1)
+          if [ -z "$IMG" ]; then IMG=$(dirname "$(find . -name '*.jpg' -not -path './.git/*' | head -n 1)"); fi
+          if [ -z "$IMG" ] || [ "$IMG" = "." -a -z "$(ls *.jpg 2>/dev/null)" ]; then echo "::warning::No screenshots (.jpg) found; cards will be created without working images."; fi
+          IMG=${IMG#./}
+          echo "script=$SCRIPT" >> "$GITHUB_OUTPUT"
+          echo "cards=$CARDS" >> "$GITHUB_OUTPUT"
+          echo "img=$IMG" >> "$GITHUB_OUTPUT"
+          echo "Using: script=$SCRIPT cards=$CARDS images=$IMG"
+
       - name: Import cards
         if: ${{ inputs.mode != 'check' }}
+        shell: bash
         run: |
-          BASE="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.event.repository.default_branch }}/images"
-          ARGS="--repo $ISSUE_REPO --owner $OWNER --project $PROJECT --image-mode inline --image-base $BASE --delay 1"
+          set -eo pipefail
+          IMG="${{ steps.loc.outputs.img }}"
+          BASE="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.event.repository.default_branch }}/${IMG}"
+          ARGS="--repo $ISSUE_REPO --owner $OWNER --project $PROJECT --cards ${{ steps.loc.outputs.cards }} --image-mode inline --image-base $BASE --delay 1"
           if [ "${{ inputs.mode }}" = "trial" ]; then ARGS="$ARGS --only AI-CHT-001"; fi
           if [ "${{ inputs.drafts }}" = "true" ]; then ARGS="$ARGS --drafts"; fi
           if [ "${{ inputs.update }}" = "true" ]; then ARGS="$ARGS --update"; fi
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          python3 import_cards.py $ARGS | tee -a "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "Running: python3 ${{ steps.loc.outputs.script }} $ARGS"
+          python3 "${{ steps.loc.outputs.script }}" $ARGS 2>&1 | tee import.log
+          echo '```' >> "$GITHUB_STEP_SUMMARY"; tail -n 60 import.log >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if ! grep -q "Finished:" import.log; then echo "::error::The import did not finish; see the log above."; exit 1; fi
+          if grep -q " 0 created" import.log && ! grep -q "already" import.log; then echo "::warning::No cards were created."; fi
