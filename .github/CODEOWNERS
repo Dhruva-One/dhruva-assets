@@ -1,0 +1,5 @@
+# Code owners. Their review is required before merge once "Require review from Code Owners" is on in branch
+# protection for main. The architect owns every file by default; when the tech lead and designer are named,
+# give them their paths below (development plan, section 7). The paths listed stay with the architect.
+*                    @ankit-dhruva
+/.github/            @ankit-dhruva
