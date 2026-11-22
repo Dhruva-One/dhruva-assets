@@ -33,7 +33,10 @@ successful (Actions tab); ask the person before treating the repo as archived or
 
 ## Checks before a PR
 
-There is no CI on pull requests; the only workflow is the manual import. Run these offline from the repo root:
+Two workflows check pull requests and main (XCT-SEC B1): `secret-scan.yml` runs gitleaks over the whole git history
+with a planted-secret self-test (XCT-SEC-005; a false positive goes into a `.gitleaks.toml` allow-list with a comment
+saying why), and `dependency-audit.yml` fails if a dependency manifest appears that nothing audits (XCT-SEC-007;
+there are no dependencies today). Both need the network to run. Run these offline from the repo root:
 ```
 python3 -I -m json.tool task/cards/ai/cards.json > /dev/null
 python3 -I task/cards/ai/import_cards.py --dry-run     # needs no gh; ends "Finished: 89 created (dry run ...)"

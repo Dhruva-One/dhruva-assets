@@ -1,0 +1,59 @@
+name: dependency-audit
+# XCT-SEC-007 (dependency scanning) for dhruva-assets. The repository has no dependencies to audit:
+# task/cards/ai/import_cards.py is standard-library Python that calls the runner's gh, and the import workflow uses
+# only actions/checkout. So the audit here is the guard "XCT-SEC-007: every dependency manifest is audited": it fails,
+# naming the file, when a manifest appears (package.json, requirements*.txt, pyproject.toml, Pipfile, setup.py,
+# setup.cfg, go.mod), so a dependency cannot arrive unaudited. Auditing one means adding a step below for its
+# ecosystem (as dhruva-docs' dependency-audit.yml does for Design/package.json) and its path to AUDITED.
+# It runs on a pull request or a push to main that changes a manifest or this workflow, and every Monday as in
+# dhruva-docs (decision 206). The guard alone gains nothing weekly; an audit step added later then runs weekly too.
+on:
+  pull_request:
+    paths:
+      - "**/package.json"
+      - "**/requirements*.txt"
+      - "**/pyproject.toml"
+      - "**/Pipfile"
+      - "**/setup.py"
+      - "**/setup.cfg"
+      - "**/go.mod"
+      - ".github/workflows/dependency-audit.yml"
+  push:
+    branches: [main]
+    paths: # the same list as pull_request
+      - "**/package.json"
+      - "**/requirements*.txt"
+      - "**/pyproject.toml"
+      - "**/Pipfile"
+      - "**/setup.py"
+      - "**/setup.cfg"
+      - "**/go.mod"
+      - ".github/workflows/dependency-audit.yml"
+  schedule:
+    - cron: "30 3 * * 1"
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      AUDITED: "" # space-separated paths of the manifests audited below (none yet)
+    steps:
+      - uses: actions/checkout@v4
+      - name: "XCT-SEC-007: every dependency manifest is audited"
+        run: |
+          patterns=('*package.json' '*requirements*.txt' '*pyproject.toml' '*Pipfile' '*setup.py' '*setup.cfg' '*go.mod')
+          missing=0
+          while IFS= read -r f; do
+            if printf "%s\n" $AUDITED | grep -qxF -- "$f"; then
+              echo "audited: $f"
+            else
+              echo "::error file=$f::$f is a dependency manifest this workflow does not audit (XCT-SEC-007)"
+              missing=1
+            fi
+          done < <(git ls-files -- "${patterns[@]}")
+          exit "$missing"
