@@ -43,7 +43,7 @@ jobs:
     env:
       AUDITED: "" # space-separated paths of the manifests audited below (none yet)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: "XCT-SEC-007: every dependency manifest is audited"
         run: |
           patterns=('*package.json' '*requirements*.txt' '*pyproject.toml' '*Pipfile' '*setup.py' '*setup.cfg' '*go.mod')
